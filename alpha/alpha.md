@@ -2,8 +2,6 @@
 
 A simple RV32I core.
 
-TODO: instruction clock count, memory layout, aligned memory accesses, write to non-writable memory
-
 ## Instruction types
 
 Internally the core recognizes 11 instruction type values, of which 9 are legal.
@@ -41,3 +39,18 @@ The core enters this state following either a reset signal or a `double` state.
 
 In `halt` state the core does not execute anything.
 The core enters this state when an illegal instruction is detected, and it only exits this state when a reset signal is provided.
+
+## Instruction clock count
+
+The core executes instructions in 1 or 2 clock cycles, depending on the instruction type.
+Instructions of the OP, OP_IMM, AUIPC and LUI type execute in one clock cycle, while instructions of the LOAD, STORE, BRANCH, JALR and JAL type execute in two clock cycles.
+The LOAD and STORE instructions use one clock cycle to access memory, and the other to load the next instruction.
+The BRANCH, JALR and JAL instructions use one clock cycle to adjust the program counter, and the other to load the next instruction at the loaded address.
+
+## Memory and address space
+
+The core can access the whole 32-bit address space, but the included examples only provide 16kwords of ROM and 16kwords of RAM.
+Additionally, various IO devices can be mapped into the address space, such as a TTY in the examples.
+
+The core does not support unaligned memory accesses and will halt when it encounters one.
+The writes to non-writable memory (ROM) are ignored, as the core does not distinguish between read-only, writable and executable sections of the address space.
