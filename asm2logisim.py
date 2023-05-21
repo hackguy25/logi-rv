@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, argparse
 
 """
 Generate the base for the Logisim-evolution's 'hex words addressed' format.
@@ -55,45 +55,71 @@ def hex_to_logisim(hex_in, base):
                 exit(1)
 
 """
-Assemble, link and convert a RISC-V assembly source file into the Logisim-evolution's 'hex words
-addressed' format.
+Assemble, link and convert a RISC-V assembly source file or an existing ELF file into the
+Logisim-evolution's 'hex words addressed' format.
 This script has only been tested on Arch Linux, using `riscv64-elf-gcc` and `riscv64-elf-binutils`
 packages.
 The script creates some intermediate files that remain on disk, unless you uncomment the final line.
 """
-if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print(f"Usage: python {sys.argv[0]} [linker script] [input file].s", file=sys.stderr)
 
-    linker_script = sys.argv[1]
-    fname = sys.argv[2]
-    fname, _ = os.path.splitext(fname)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Convert a file to the Logisim-evolution's 'hex words addressed' format."
+    )
+    parser.add_argument("input_file")
+    parser.add_argument("-l", "--linker-script")
+    parser.add_argument("--remove-system-instructions", action="store_true")
+    args = parser.parse_args()
+
+    file_name, file_ext = os.path.splitext(args.input_file)
 
     # Assemble the source.
-    err = os.system(f"riscv64-elf-as -march=rv32i -mlittle-endian -o {fname}.o {fname}.s")
-    if err != 0:
-        print("'as' failed.", file=sys.stderr)
-        exit(err)
+    if file_ext == ".s":
+        err = os.system(f"riscv64-elf-as -march=rv32i -mlittle-endian -o {file_name}.o {file_name}.s")
+        if err != 0:
+            print("'as' failed.", file=sys.stderr)
+            exit(err)
 
     # Link the assembled output.
-    err = os.system(f"riscv64-elf-ld -melf32lriscv -T {linker_script} -o {fname}.l.o {fname}.o")
-    if err != 0:
-        print("'ld' failed.", file=sys.stderr)
-        exit(err)
+    if args.linker_script:
+        err = os.system(f"riscv64-elf-ld -melf32lriscv -T {linker_script} -o {file_name}.l.o {file_name}.o")
+        if err != 0:
+            print("'ld' failed.", file=sys.stderr)
+            exit(err)
+
+    # Determine which file to convert.
+    if args.linker_script:
+        file_to_convert = f"{file_name}.l.o"
+    elif file_ext == ".s":
+        file_to_convert = f"{file_name}.o"
+    else:
+        file_to_convert = file_name + file_ext
 
     # Convert the ELF file into an Intel HEX file.
-    err = os.system(f"riscv64-elf-objcopy -O ihex {fname}.l.o {fname}.hex")
+    err = os.system(f"riscv64-elf-objcopy -O ihex {file_to_convert} {file_name}.hex")
     if err != 0:
         print("'objcopy' failed.", file=sys.stderr)
         exit(err)
 
     # Convert the Intel HEX file into the Logisim-evolution's 'v3.0 hex words addressed' format.
     base = generate_hex_words_base()
-    with open(f"{fname}.hex", "r") as f_in:
+    with open(f"{file_name}.hex", "r") as f_in:
         hex_in = f_in.readlines()
     hex_to_logisim(hex_in, base)
 
-    with open(f"{fname}.lgs", "w") as f_out:
+    # Remove the SYSTEM instructions
+    if args.remove_system_instructions:
+        for i in range(1, len(base)):
+            line = base[i].split(": ")
+            data = line[1].split(" ")
+            for j in range(len(data)):
+                if data[j][-2:] in ["73", "F3"]:
+                    data[j] = "00000013" # nop = addi zero, zero, 0
+            base[i] = ": ".join([line[0], " ".join(data)])
+
+    # Save the data.
+    with open(f"{file_name}.lgs", "w") as f_out:
         for l in base:
             f_out.write(l)
 
