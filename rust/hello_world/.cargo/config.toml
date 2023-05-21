@@ -6,6 +6,3 @@ rustflags = [
   "-C", "link-arg=-Tmemory.x",
   "-C", "link-arg=-Tlink.x",
 ]
-
-# [unstable]
-# build-std = ["core", "compiler_builtins"]
